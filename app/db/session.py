@@ -1,16 +1,26 @@
+"""Firestore database session management."""
 from firebase_admin import firestore
-from app.core.security import _ensure_firebase_app
+from google.cloud.firestore import Client
 
-# Firestore emulator destegi icin: FIRESTORE_EMULATOR_HOST env var ise client otomatik ona baglanir
+from app.core.security import ensure_firebase_app
 
-def get_db():
-    """Firestore Client'i dependency olarak sağlar"""
-    # Firebase Admin SDK'nın initialize edildiğinden emin ol
-    _ensure_firebase_app()
-    # Firebase Admin SDK üzerinden Firestore client al
+
+def get_db() -> Client:
+    """Provide Firestore Client as a dependency.
+    
+    Yields:
+        Firestore Client instance
+        
+    Note:
+        Firestore emulator support: If FIRESTORE_EMULATOR_HOST env var is set,
+        client automatically connects to it.
+    """
+    # Ensure Firebase Admin SDK is initialized
+    ensure_firebase_app()
+    # Get Firestore client from Firebase Admin SDK
     client = firestore.client()
     try:
         yield client
     finally:
-        # Firestore Client kapatma gerektirmez; placeholder
+        # Firestore Client doesn't require explicit closing
         pass

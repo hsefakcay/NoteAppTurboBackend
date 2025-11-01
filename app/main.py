@@ -7,6 +7,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import settings
 from app.api.v1.notes import router as notes_router
+from app.api.v1.flashcards import router as flashcards_router
 
 limiter = Limiter(key_func=get_remote_address) if settings.rate_limit_enabled else None
 
@@ -44,3 +45,4 @@ if limiter:
 
 # Routers
 app.include_router(notes_router, prefix="/api", tags=["notes"])
+app.include_router(flashcards_router, prefix="/api", tags=["flashcards"])

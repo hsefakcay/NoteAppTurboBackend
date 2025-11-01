@@ -11,3 +11,4 @@ pytest-asyncio==0.23.8
 requests==2.32.3
 google-cloud-firestore==2.16.0
 pydantic-settings==2.3.4
+# google-generativeai>=0.8.0  # Not used - using REST API instead via httpx

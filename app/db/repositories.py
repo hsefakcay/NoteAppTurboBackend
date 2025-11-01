@@ -101,5 +101,11 @@ class NoteRepository:
         self.col.document(note_id).update(updates)
         return self._doc_to_noteout(self.col.document(note_id).get())
 
+    def toggle_pin(self, note_id: str, pinned: bool):
+        """Pin/unpin a note without updating timestamp"""
+        updates = {"pinned": bool(pinned)}
+        self.col.document(note_id).update(updates)
+        return self._doc_to_noteout(self.col.document(note_id).get())
+
     def delete(self, note_id: str) -> None:
         self.col.document(note_id).delete()

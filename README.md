@@ -10,6 +10,8 @@ FastAPI backend with Firebase Authentication and Firestore database for Note App
 - **Firebase Admin SDK** - Authentication ve Firestore
 - **Pydantic** - Data validation
 - **SlowAPI** - Rate limiting (opsiyonel)
+- **HTTPX** - Async HTTP client
+- **Google Gemini AI** - AI-powered flashcard generation
 
 ## 📁 Proje Yapısı
 
@@ -17,7 +19,8 @@ FastAPI backend with Firebase Authentication and Firestore database for Note App
 note_app_backend/
 ├── app/
 │   ├── api/v1/          # API endpoints
-│   │   └── notes.py     # Notes CRUD operations
+│   │   ├── notes.py     # Notes CRUD operations
+│   │   └── flashcards.py  # AI flashcard generation
 │   ├── core/            # Core configuration
 │   │   ├── config.py    # Settings
 │   │   └── security.py  # Firebase Auth
@@ -25,7 +28,8 @@ note_app_backend/
 │   │   ├── session.py   # Firestore client
 │   │   └── repositories.py  # Data access layer
 │   ├── schemas/         # Pydantic models
-│   │   └── note.py
+│   │   ├── note.py
+│   │   └── flashcard.py
 │   ├── tests/           # Unit tests
 │   └── main.py          # FastAPI app
 ├── scripts/
@@ -52,6 +56,7 @@ Gerekli değişkenleri düzenleyin:
 FIREBASE_PROJECT_ID=your-firebase-project-id
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/firebase-service-account.json
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+GEMINI_API_KEY=your-gemini-api-key
 ```
 
 ### 2. Virtual Environment Oluştur
@@ -102,6 +107,9 @@ pytest app/tests/
 - `PUT /api/notes/{note_id}` - Not güncelle
 - `DELETE /api/notes/{note_id}` - Not sil
 
+### Flashcards (AI-Powered)
+- `POST /api/flashcards/generate` - Not içeriğinden AI ile flashcard oluştur
+
 ### Authentication
 
 Tüm `/api/notes` endpoint'leri Firebase ID token gerektirir:
@@ -127,6 +135,44 @@ curl -X POST "http://127.0.0.1:8000/api/notes" \
   -H "Content-Type: application/json" \
   -d '{"title": "Başlık", "content": "İçerik", "pinned": false}'
 ```
+
+### AI ile Flashcard Oluştur
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/flashcards/generate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "note_content": "Fotosentez, bitkilerin güneş ışığını kullanarak karbondioksit ve sudan glikoz ürettiği bir süreçtir. Bu süreç, kloroplastlarda bulunan klorofil pigmenti tarafından gerçekleştirilir. Fotosentezin ana ürünü glikoz ve oksijen gazıdır. Bitkiler bu glikozü enerji kaynağı olarak kullanır ve oksijeni atmosfere bırakır."
+  }'
+```
+
+**Örnek Response:**
+
+```json
+{
+  "flashcards": [
+    {
+      "question": "Fotosentez nedir?",
+      "answer": "Bitkilerin güneş ışığını kullanarak karbondioksit ve sudan glikoz ürettiği bir süreç"
+    },
+    {
+      "question": "Fotosentez hangi organelde gerçekleşir?",
+      "answer": "Kloroplastlarda, klorofil pigmenti tarafından gerçekleştirilir"
+    },
+    {
+      "question": "Fotosentezin ürünleri nelerdir?",
+      "answer": "Glikoz ve oksijen gazı"
+    }
+  ],
+  "note_content_preview": "Fotosentez, bitkilerin güneş ışığını kullanarak karbondioksit ve sudan glikoz ürettiği bir süreç..."
+}
+```
+
+**Not:** 
+- Bu endpoint authentication gerektirmez (gerekirse `get_current_user_id` dependency'si eklenebilir)
+- Google Gemini AI kullanır - hızlı ve güvenilir (1-2 saniye içinde yanıt)
+- Google Gemini API key'i `.env` dosyasında `GEMINI_API_KEY` olarak tanımlanmalıdır
+- API key almak için: https://ai.google.dev/
 
 ## 🗄️ Firestore Emulator (Yerel Geliştirme)
 

@@ -13,27 +13,41 @@ FastAPI backend with Firebase Authentication and Firestore database for Note App
 - **HTTPX** - Async HTTP client
 - **Google Gemini AI** - AI-powered flashcard generation
 
+## ✨ Özellikler
+
+- ✅ **Structured Logging** - Production-ready logging sistemi
+- ✅ **Error Handling** - Custom exception classes ve global error handler
+- ✅ **Type Safety** - Kapsamlı type hints ve validation
+- ✅ **Security** - Improved authentication ve token validation
+- ✅ **Clean Code** - Best practices ve SOLID prensipleri
+- ✅ **Documentation** - Kapsamlı docstrings ve API dokümantasyonu
+
 ## 📁 Proje Yapısı
 
 ```
 note_app_backend/
 ├── app/
-│   ├── api/v1/          # API endpoints
-│   │   ├── notes.py     # Notes CRUD operations
-│   │   └── flashcards.py  # AI flashcard generation
-│   ├── core/            # Core configuration
-│   │   ├── config.py    # Settings
-│   │   └── security.py  # Firebase Auth
-│   ├── db/              # Database
-│   │   ├── session.py   # Firestore client
-│   │   └── repositories.py  # Data access layer
-│   ├── schemas/         # Pydantic models
+│   ├── api/v1/              # API endpoints
+│   │   ├── notes.py         # Notes CRUD operations
+│   │   └── flashcards.py    # AI flashcard generation
+│   ├── core/                # Core configuration
+│   │   ├── config.py        # Settings and configuration
+│   │   ├── constants.py    # Application-wide constants
+│   │   ├── exceptions.py   # Custom exception classes
+│   │   ├── logging_config.py # Logging configuration
+│   │   ├── middleware.py    # Custom middleware
+│   │   └── security.py     # Firebase Auth and security
+│   ├── db/                  # Database
+│   │   ├── session.py       # Firestore client
+│   │   └── repositories.py # Data access layer
+│   ├── schemas/             # Pydantic models
 │   │   ├── note.py
 │   │   └── flashcard.py
-│   ├── tests/           # Unit tests
-│   └── main.py          # FastAPI app
+│   ├── tests/               # Unit tests
+│   └── main.py              # FastAPI app
 ├── scripts/
-│   └── seed_firestore.py  # Seed data script
+│   ├── check_firestore.py   # Firestore debugging script
+│   └── seed_firestore.py    # Seed data script
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
@@ -202,11 +216,40 @@ docker build -t note-app-backend .
 docker run -p 8000:8000 --env-file .env note-app-backend
 ```
 
+## 🔧 Geliştirme Notları
+
+### Logging
+
+Uygulama structured logging kullanır. Log seviyesi `DEBUG` environment variable ile kontrol edilir:
+
+```bash
+DEBUG=true uvicorn app.main:app --reload
+```
+
+Loglar konsola yazılır ve şu formatı kullanır:
+```
+YYYY-MM-DD HH:MM:SS - module_name - LEVEL - message
+```
+
+### Error Handling
+
+- Custom exception classes (`NotFoundError`, `UnauthorizedError`, `ValidationError`, `ExternalAPIError`)
+- Global exception handler middleware
+- Tutarlı hata response formatı: `{"detail": "...", "code": "error_code"}`
+
+### Kod Kalitesi
+
+- Type hints tüm fonksiyonlarda
+- Constants dosyası ile magic number/string'ler merkezi yönetiliyor
+- Docstrings tüm public fonksiyonlarda
+- Repository pattern ile data access layer ayrımı
+
 ## 📚 Daha Fazla Bilgi
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup)
 - [Firestore Documentation](https://firebase.google.com/docs/firestore)
+- [Python Logging](https://docs.python.org/3/library/logging.html)
 
 ## 📄 Lisans
 

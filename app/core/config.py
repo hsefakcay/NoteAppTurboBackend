@@ -1,10 +1,14 @@
-from typing import List, Optional, Any, Union
-from pydantic import BaseModel, model_validator
+"""Application configuration settings."""
+from typing import List, Optional, Union
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from fastapi.responses import JSONResponse
 import os
 
+
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+    
     model_config = SettingsConfigDict(env_file=os.getenv("ENV_FILE", ".env"), extra="ignore")
 
     app_name: str = "Note App Turbo API"
@@ -27,16 +31,31 @@ class Settings(BaseSettings):
     
     @model_validator(mode='after')
     def convert_cors_origins(self) -> 'Settings':
-        """Convert comma-separated CORS origins string to list"""
+        """Convert comma-separated CORS origins string to list.
+        
+        Returns:
+            Settings instance with cors_origins as list
+        """
         if isinstance(self.cors_origins, str):
             self.cors_origins = [origin.strip() for origin in self.cors_origins.split(",")]
         return self
 
     @staticmethod
     def error_response(detail: str, code: Optional[str] = None, status_code: int = 400) -> JSONResponse:
+        """Create a standardized error response.
+        
+        Args:
+            detail: Error message
+            code: Optional error code
+            status_code: HTTP status code
+            
+        Returns:
+            JSONResponse with error details
+        """
         payload: dict[str, str] = {"detail": detail}
         if code:
             payload["code"] = code
         return JSONResponse(status_code=status_code, content=payload)
+
 
 settings = Settings()

@@ -1,25 +1,31 @@
-import httpx
-from typing import List
-from fastapi import APIRouter, HTTPException, status
-from app.core.config import settings
-from app.schemas.flashcard import FlashcardRequest, FlashcardResponse, Flashcard
+"""Flashcards API endpoints for AI-powered flashcard generation."""
 import json
 import re
+import logging
+from typing import List
 
+import httpx
+from fastapi import APIRouter, status
+
+from app.core.logging_config import get_logger
+from app.core.config import settings
+from app.core.exceptions import ValidationError, ExternalAPIError
+from app.core.constants import (
+    GEMINI_API_BASE_URL,
+    API_TIMEOUT_SECONDS,
+    MIN_NOTE_CONTENT_LENGTH,
+    MAX_NOTE_CONTENT_LENGTH,
+    MAX_FLASHCARDS,
+    MAX_PREVIEW_LENGTH,
+)
+from app.schemas.flashcard import FlashcardRequest, FlashcardResponse, Flashcard
+
+logger = get_logger(__name__)
 router = APIRouter(prefix="/flashcards")
-
-# Constants
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1"
-API_TIMEOUT = 30.0
-MIN_NOTE_CONTENT_LENGTH = 10
-MAX_NOTE_CONTENT_LENGTH = 5000
-MAX_FLASHCARDS = 5
-MAX_PREVIEW_LENGTH = 100
 
 
 async def generate_flashcards_with_gemini(note_content: str) -> List[Flashcard]:
-    """
-    Generate flashcards using Google Gemini AI API via REST API.
+    """Generate flashcards using Google Gemini AI API via REST API.
     
     Args:
         note_content: The text content from which to generate flashcards
@@ -28,12 +34,14 @@ async def generate_flashcards_with_gemini(note_content: str) -> List[Flashcard]:
         List of Flashcard objects with question and answer pairs
         
     Raises:
-        HTTPException: If API call fails or API key is missing
+        ExternalAPIError: If API call fails or API key is missing
     """
     if not settings.gemini_api_key:
-        raise HTTPException(
+        logger.error("Gemini API key not configured")
+        raise ExternalAPIError(
+            "Google Gemini API key not configured. Please set GEMINI_API_KEY in environment variables.",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Google Gemini API key not configured. Please set GEMINI_API_KEY in environment variables."
+            service="Gemini",
         )
     
     # Create the prompt for flashcard generation
@@ -79,38 +87,47 @@ Generate flashcards now (JSON only):"""
         }
     }
     
+    logger.info(f"Requesting flashcard generation from Gemini API (content length: {len(note_content)})")
     try:
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 f"{api_url}?key={settings.gemini_api_key}",
                 json=payload,
-                headers=headers
+                headers=headers,
             )
             
             # Handle specific API errors
             if response.status_code == 401:
-                raise HTTPException(
+                logger.error("Invalid Gemini API key")
+                raise ExternalAPIError(
+                    "Invalid Google Gemini API key",
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid Google Gemini API key"
+                    service="Gemini",
                 )
             elif response.status_code == 429:
-                raise HTTPException(
+                logger.warning("Gemini API rate limit exceeded")
+                raise ExternalAPIError(
+                    "Gemini API rate limit exceeded. Please try again later.",
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Gemini API rate limit exceeded. Please try again later."
+                    service="Gemini",
                 )
             elif response.status_code == 400:
                 error_data = response.json() if response.content else {}
                 error_msg = error_data.get("error", {}).get("message", response.text)
-                raise HTTPException(
+                logger.error(f"Gemini API bad request: {error_msg}")
+                raise ExternalAPIError(
+                    error_msg,
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Gemini API error: {error_msg}"
+                    service="Gemini",
                 )
             elif response.status_code != 200:
                 error_data = response.json() if response.content else {}
                 error_msg = error_data.get("error", {}).get("message", response.text)
-                raise HTTPException(
+                logger.error(f"Gemini API error (status {response.status_code}): {error_msg}")
+                raise ExternalAPIError(
+                    error_msg,
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Gemini API error: {error_msg}"
+                    service="Gemini",
                 )
             
             result = response.json()
@@ -144,6 +161,7 @@ Generate flashcards now (JSON only):"""
             
             # Validate and convert to Flashcard objects
             if not isinstance(flashcards_data, list):
+                logger.error("Gemini response is not a JSON array")
                 raise ValueError("Response is not a JSON array")
             
             flashcards = []
@@ -151,30 +169,39 @@ Generate flashcards now (JSON only):"""
                 if isinstance(item, dict) and "question" in item and "answer" in item:
                     flashcards.append(Flashcard(
                         question=item["question"].strip(),
-                        answer=item["answer"].strip()
+                        answer=item["answer"].strip(),
                     ))
             
             if not flashcards:
+                logger.error("No valid flashcards found in Gemini response")
                 raise ValueError("No valid flashcards found in response")
             
+            logger.info(f"Successfully generated {len(flashcards)} flashcards")
             return flashcards
             
     except httpx.TimeoutException:
-        raise HTTPException(
+        logger.error("Gemini API request timed out")
+        raise ExternalAPIError(
+            "Gemini API request timed out. Please try again.",
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Gemini API request timed out. Please try again."
+            service="Gemini",
         )
     except httpx.RequestError as e:
-        raise HTTPException(
+        logger.error(f"Failed to connect to Gemini API: {e}")
+        raise ExternalAPIError(
+            f"Failed to connect to Gemini API: {str(e)}",
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to connect to Gemini API: {str(e)}"
+            service="Gemini",
         )
-    except HTTPException:
+    except (ExternalAPIError, ValueError) as e:
+        # Re-raise custom exceptions
         raise
     except Exception as e:
-        raise HTTPException(
+        logger.exception("Unexpected error generating flashcards")
+        raise ExternalAPIError(
+            f"Failed to generate flashcards: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate flashcards: {str(e)}"
+            service="Gemini",
         )
 
 
@@ -186,43 +213,46 @@ Generate flashcards now (JSON only):"""
     description="Uses Google Gemini AI to generate educational flashcards from note text"
 )
 async def generate_flashcards(body: FlashcardRequest) -> FlashcardResponse:
-    """
-    Generate flashcards from note content using Google Gemini AI.
+    """Generate flashcards from note content using Google Gemini AI.
     
-    - **note_content**: The text content from which to generate flashcards
-    
-    Returns a list of question-answer pairs suitable for study and review.
+    Args:
+        body: FlashcardRequest containing note_content
+        
+    Returns:
+        FlashcardResponse with generated flashcards and content preview
+        
+    Raises:
+        ValidationError: If note content is too short or invalid
+        ExternalAPIError: If Gemini API call fails
     """
-    try:
-        # Validate input
-        if not body.note_content or len(body.note_content.strip()) < MIN_NOTE_CONTENT_LENGTH:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Note content must be at least {MIN_NOTE_CONTENT_LENGTH} characters long"
-            )
-        
-        # Truncate very long content to avoid API limits
-        note_content = body.note_content
-        if len(note_content) > MAX_NOTE_CONTENT_LENGTH:
-            note_content = note_content[:MAX_NOTE_CONTENT_LENGTH] + "..."
-        
-        # Generate flashcards using Gemini AI
-        flashcards = await generate_flashcards_with_gemini(note_content)
-        
-        # Create preview of input
-        preview = body.note_content[:MAX_PREVIEW_LENGTH] + "..." if len(body.note_content) > MAX_PREVIEW_LENGTH else body.note_content
-        
-        return FlashcardResponse(
-            flashcards=flashcards,
-            note_content_preview=preview
+    logger.info("Flashcard generation request received")
+    
+    # Validate input
+    if not body.note_content or len(body.note_content.strip()) < MIN_NOTE_CONTENT_LENGTH:
+        logger.warning(f"Note content too short: {len(body.note_content.strip() if body.note_content else 0)} chars")
+        raise ValidationError(
+            f"Note content must be at least {MIN_NOTE_CONTENT_LENGTH} characters long"
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print(f"Error generating flashcards: {e}")
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate flashcards: {str(e)}"
-        )
+    
+    # Truncate very long content to avoid API limits
+    note_content = body.note_content
+    original_length = len(note_content)
+    if len(note_content) > MAX_NOTE_CONTENT_LENGTH:
+        note_content = note_content[:MAX_NOTE_CONTENT_LENGTH] + "..."
+        logger.info(f"Truncated note content from {original_length} to {MAX_NOTE_CONTENT_LENGTH} characters")
+    
+    # Generate flashcards using Gemini AI
+    flashcards = await generate_flashcards_with_gemini(note_content)
+    
+    # Create preview of input
+    preview = (
+        body.note_content[:MAX_PREVIEW_LENGTH] + "..."
+        if len(body.note_content) > MAX_PREVIEW_LENGTH
+        else body.note_content
+    )
+    
+    logger.info(f"Successfully generated {len(flashcards)} flashcards")
+    return FlashcardResponse(
+        flashcards=flashcards,
+        note_content_preview=preview,
+    )
